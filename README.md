@@ -4,6 +4,10 @@
 
 [下载安装包](https://github.com/MurphyWhite/VideoDownload/releases/latest) · [反馈问题](https://github.com/MurphyWhite/VideoDownload/issues) · [隐私政策](PRIVACY.md)
 
+## 1.1.1 修复
+
+某些 CDN 的 `token_path` 只写资产目录，实际媒体地址前面还有日期目录。现在会识别并限制在完整资产目录内，把签名传给清晰度列表、分片与密钥；仍不跨域或跨资产复用签名。
+
 ## 1.1.0 更新
 
 - 默认 8 路并发，可选 4 / 8 / 12 路；显示本次运行的平均写入速度。网站限速和网络情况仍决定实际速度。
@@ -16,7 +20,7 @@
 
 ## 本地安装
 
-1. 在 [Releases](https://github.com/MurphyWhite/VideoDownload/releases/latest) 下载 `liucun-m3u8-1.1.0.zip`，或下载仓库源码 ZIP。
+1. 在 [Releases](https://github.com/MurphyWhite/VideoDownload/releases/latest) 下载 `liucun-m3u8-1.1.1.zip`，或下载仓库源码 ZIP。
 2. 将 ZIP 解压到一个固定目录；Chrome 需要持续读取该目录，请不要安装后删除它。
 3. 使用 Chrome 120 或更高版本，打开 `chrome://extensions`。
 4. 开启右上角的 **开发者模式（Developer mode）**，点击 **加载已解压的扩展程序（Load unpacked）**。

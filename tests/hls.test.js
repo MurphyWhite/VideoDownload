@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { attributes, httpUrl, mediaUrl, parsePlaylist, sequenceIv, safeFilename } from '../lib/hls.js';
+import { attributes, httpUrl, mediaUrl, parsePlaylist, sequenceIv, safeFilename, signedContext } from '../lib/hls.js';
 
 const base = 'https://cdn.example/path/list.m3u8?token=secret';
 const media = (body) => `#EXTM3U\n${body}\n#EXT-X-ENDLIST`;
@@ -106,4 +106,38 @@ test('authentication never leaks outside its origin/scope or overrides child aut
   assert.equal(new URL(mediaUrl('child.ts', signed.replace('%2Fasset%2F', '%2F'))).searchParams.get('token'), 'test-only');
   assert.equal(new URL(mediaUrl('child.ts', signed.replace('%2Fasset%2F', '%2Fasset%2F..%2F'))).searchParams.has('token'), false);
   assert.equal(new URL(mediaUrl('child.ts', signed.replace('&token_path=%2Fasset%2F', ''))).searchParams.has('token'), false);
+});
+
+test('date-prefixed CDN paths retain a signed asset suffix for playlists and media', () => {
+  const signed = 'https://cdn.example/20261004/asset/playlist.m3u8?token=test-only&expires=9999999999&token_path=%2Fasset%2F';
+  assert.equal(signedContext(signed)?.effectiveScope, '/20261004/asset/');
+  const master = parsePlaylist('#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=100\n720p/video.m3u8', signed);
+  const variant = master.variants[0].url;
+  assert.equal(new URL(variant).searchParams.get('token'), 'test-only');
+  const media = parsePlaylist('#EXTM3U\n#EXTINF:2,\nsegment.ts\n#EXT-X-ENDLIST', variant);
+  assert.equal(new URL(media.segments[0].url).searchParams.get('token'), 'test-only');
+  const encrypted = parsePlaylist('#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,URI="../key.bin"\n#EXTINF:2,\nsegment.ts\n#EXT-X-ENDLIST', variant);
+  assert.equal(new URL(encrypted.segments[0].key.url).searchParams.get('token'), 'test-only');
+  const fragmented = parsePlaylist('#EXTM3U\n#EXT-X-MAP:URI="init.mp4"\n#EXTINF:2,\nsegment.m4s\n#EXT-X-ENDLIST', variant);
+  assert.equal(new URL(fragmented.segments[0].map.url).searchParams.get('token'), 'test-only');
+});
+
+test('date-prefixed signed credentials stay within one asset directory', () => {
+  const signed = 'https://cdn.example/20261004/asset/playlist.m3u8?token=test-only&expires=9999999999&token_path=%2Fasset%2F';
+  for (const child of ['../other/segment.ts', '/20261005/asset/segment.ts',
+    '/20261004/asset-copy/segment.ts', 'https://other.example/20261004/asset/segment.ts']) {
+    assert.equal(new URL(mediaUrl(child, signed)).searchParams.has('token'), false);
+  }
+});
+
+test('malformed expiry values never propagate a CDN signature', () => {
+  const signed = 'https://cdn.example/20261004/asset/playlist.m3u8?token=test-only&expires=1e2&token_path=%2Fasset%2F';
+  assert.equal(new URL(mediaUrl('720p/video.m3u8', signed)).searchParams.has('token'), false);
+});
+
+test('repeated asset path segments fail explicitly instead of changing the signing boundary', () => {
+  const signed = 'https://cdn.example/20261004/asset/playlist.m3u8?token=test-only&expires=9999999999&token_path=%2Fasset%2F';
+  assert.throws(() => parsePlaylist('#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=100\n720p/asset/video.m3u8', signed), /签名目录.*重复/);
+  const ambiguous = 'https://cdn.example/20261004/asset/720p/asset/video.m3u8?token=test-only&expires=9999999999&token_path=%2Fasset%2F';
+  assert.equal(signedContext(ambiguous), null);
 });

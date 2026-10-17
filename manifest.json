@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "流存 · M3U8 视频下载",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "发现当前网页的 HLS 视频，选择清晰度并将分片合并保存到本地。",
   "minimum_chrome_version": "120",
   "permissions": ["activeTab", "scripting", "storage", "webRequest", "downloads"],

@@ -39,3 +39,15 @@ test('renewal rejects lower expiry, different scope, missing credentials and uns
     assert.equal(renewMediaUrl(old, candidate), old);
   }
 });
+
+test('renewal distinguishes date-prefixed assets sharing the same declared token path', () => {
+  const old = 'https://cdn.test/20261004/asset/720p/one.ts?token=old&expires=9999999998&token_path=%2Fasset%2F';
+  const fresh = 'https://cdn.test/20261004/asset/playlist.m3u8?token=new&expires=9999999999&token_path=%2Fasset%2F';
+  assert.equal(new URL(renewMediaUrl(old, fresh)).searchParams.get('token'), 'new');
+  assert.equal(renewMediaUrl(old, fresh.replace('20261004', '20261005')), old);
+  const auth = createAuthProvider({ fetchLatest: async () => fresh, pollMs: 2, waitMs: 100 });
+  return auth.onUnauthorized(old, { status: 403 }).then((renewed) => {
+    assert.equal(new URL(renewed).searchParams.get('token'), 'new');
+    assert.equal(auth.urlFor(old.replace('20261004', '20261005')), old.replace('20261004', '20261005'));
+  });
+});
