@@ -1,0 +1,12 @@
+.DS_Store
+node_modules/
+artifacts/
+dist/
+store/
+.env
+.env.*
+!.env.example
+.aws/
+.codex/
+.agents/
+__pycache__/

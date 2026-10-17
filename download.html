@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>下载管理 · 流存</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="download.js" type="module"></script>
+</head>
+<body class="manager">
+  <div class="workspace">
+    <header class="manager-header"><div class="brand"><img src="icons/icon48.png" width="40" height="40" alt=""><div><h1>流存<span class="tag">HLS</span></h1><p>视频下载工作台</p></div></div><span class="local-label"><span class="status-dot"></span>在此设备处理</span></header>
+    <main class="workspace-main">
+      <div class="intro"><span class="eyebrow">SAVE THE MOMENT</span><h2>从播放，到保存。</h2><p>读取播放列表，选择清晰度，合并为一个视频文件。</p></div>
+      <section class="panel">
+        <div class="section-heading"><span class="step">01</span><h3>视频来源</h3></div>
+        <form id="playlist-form"><label for="playlist-url">M3U8 地址</label><div class="input-row"><input id="playlist-url" type="url" required placeholder="https://example.com/video/index.m3u8" autocomplete="off" spellcheck="false"><button id="analyze" class="primary" type="submit">解析视频</button></div></form>
+        <label for="filename">保存文件名</label><input id="filename" maxlength="120" value="video" autocomplete="off">
+      </section>
+      <section id="selection" class="panel" hidden><div class="section-heading"><span class="step">02</span><h3>选择清晰度</h3></div><div id="variants" class="variants"></div><button id="back" class="text-button" type="button" hidden>← 返回上一层播放列表</button><div id="media-info" class="media-info" hidden></div><div class="download-options"><label for="concurrency">下载并发<select id="concurrency"><option value="4">4 路 · 稳定</option><option value="8" selected>8 路 · 推荐</option><option value="12">12 路 · 高速</option></select></label><label for="output-mode">保存方式<select id="output-mode"><option value="disk">直接写入磁盘 · 大文件</option><option value="memory">兼容模式 · 最大 512 MiB</option></select></label></div><label class="check-label"><input id="auto-refresh" type="checkbox" checked>签名过期时自动刷新来源页面并续传</label><button id="start" class="primary wide" type="button" hidden>下载并合并视频 ↓</button></section>
+      <section id="progress-panel" class="panel" hidden><div class="card-top"><h3 id="progress-title">正在下载分片</h3><button id="cancel" class="text-button danger" type="button">取消</button></div><progress id="progress" max="100" value="0" aria-label="视频下载进度"></progress><div class="progress-meta"><span id="progress-detail">准备中…</span><strong id="percentage">0%</strong></div><button id="save-again" class="primary wide" type="button" hidden>重新保存文件</button><button id="discard" class="text-button danger" type="button" hidden>放弃当前任务并清除续传进度</button></section>
+      <p id="message" class="message" role="status" aria-live="polite">粘贴视频地址，或从扩展弹窗选择检测到的视频。</p>
+      <aside class="help"><h3>开始前的小提示</h3><p>请保持此标签页打开，暂停或失败后可在本页继续。磁盘模式开始前选择文件，完成后才提交保存，不受 512 MiB 内存上限限制；兼容模式仍有此上限。关闭或重新加载工作台会丢失续传状态。</p><p>签名过期时会从同一视频的新请求中获取签名；开启自动刷新后，来源页面会重新加载。无法获取时等待最多 2 分钟，已完成分片会保留。</p><p>支持点播 TS、fMP4 和普通 AES-128 HLS；暂不支持直播、DRM、独立音视频轨合并和时间线切换。不提供 MP4 转码。</p></aside>
+    </main>
+    <footer>流存 · M3U8 下载工具<span>仅下载你有权保存的内容</span></footer>
+  </div>
+</body>
+</html>
