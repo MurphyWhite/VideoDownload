@@ -99,6 +99,17 @@ async function handleMessage(message) {
     return { url: renewed };
   }
   if (!Number.isInteger(message.tabId) || message.tabId < 0) throw new Error('无效标签页。');
+  if (message.type === 'GET_SOURCE_MEDIA') {
+    const tab = await chrome.tabs.get(message.tabId);
+    const source = new URL(httpUrl(tab.url));
+    if (typeof message.sourceOrigin !== 'string' || source.origin !== message.sourceOrigin) {
+      throw new Error('来源标签页已切换网站，请返回原视频页面。');
+    }
+    await queues.get(message.tabId)?.catch(() => {});
+    const data = await chrome.storage.session.get(keyFor(message.tabId));
+    return { items: (data[keyFor(message.tabId)] || [])
+      .filter((item) => item.source === 'network').slice(-12).reverse() };
+  }
   if (message.type === 'GET_MEDIA') {
     await queues.get(message.tabId)?.catch(() => {});
     const data = await chrome.storage.session.get(keyFor(message.tabId));

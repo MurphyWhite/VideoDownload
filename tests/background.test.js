@@ -76,3 +76,12 @@ test('source playback guide only focuses the original website tab', async () => 
   assert.deepEqual(globalThis.focusedTab, { id: 1, active: true });
   assert.deepEqual(globalThis.focusedWindow, { id: 7, focused: true });
 });
+
+test('CDN recovery reads only successful network playlists from the bound source website', async () => {
+  detect('https://new-cdn.test/asset/master.m3u8', 1);
+  assert.equal((await send({ type: 'GET_SOURCE_MEDIA', tabId: 1, sourceOrigin: 'https://other.test' })).ok, false);
+  const response = await send({ type: 'GET_SOURCE_MEDIA', tabId: 1, sourceOrigin: 'https://page.test' });
+  assert.equal(response.ok, true);
+  assert.deepEqual(response.items.map((item) => item.url), ['https://new-cdn.test/asset/master.m3u8']);
+  assert.equal((await send({ type: 'GET_SOURCE_MEDIA', tabId: 1, sourceOrigin: 42 })).ok, false);
+});

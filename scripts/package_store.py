@@ -10,7 +10,7 @@ manifest = json.loads((ROOT / 'manifest.json').read_text(encoding='utf-8'))
 files = [
     'manifest.json', 'background.js', 'content.js', 'popup.html', 'popup.js',
     'download.html', 'download.js', 'styles.css', 'lib/hls.js',
-    'lib/downloader.js', 'lib/auth.js', *manifest['icons'].values(),
+    'lib/downloader.js', 'lib/auth.js', 'lib/continuity.js', *manifest['icons'].values(),
 ]
 assert manifest['manifest_version'] == 3
 assert len(manifest['description']) <= 132

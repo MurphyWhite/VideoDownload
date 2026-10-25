@@ -1,6 +1,7 @@
-import { httpUrl, safeFilename } from './lib/hls.js';
+import { httpUrl, safeFilename, signedContext } from './lib/hls.js';
 import { loadPlaylist, downloadMedia, createDownloadState } from './lib/downloader.js';
 import { createAuthProvider } from './lib/auth.js';
+import { findReplacementPlaylist } from './lib/continuity.js';
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.hash.slice(1));
@@ -27,10 +28,12 @@ function message(text, error = false) {
   $('message').classList.toggle('error', error);
 }
 function showSourceHelp(show) { $('source-help').hidden = !show || !hasSourceTab; }
+function showSourceSwitch(show) { $('source-switch').hidden = !show || !hasSourceTab; }
 function setBusy(value) {
   working = value;
   for (const id of ['analyze', 'playlist-url', 'filename', 'back', 'output-mode']) $(id).disabled = value || Boolean(job);
   $('start').disabled = value;
+  $('source-switch').disabled = value;
   $('concurrency').disabled = value;
   $('discard').hidden = !job || value;
   $('auto-refresh').disabled = sourceTabId === null || !sourceOrigin;
@@ -50,6 +53,7 @@ async function discardJob() {
   if (job?.writer) await job.writer.abort().catch(() => {});
   job = undefined;
   showSourceHelp(false);
+  showSourceSwitch(false);
   setBusy(false);
 }
 
@@ -117,6 +121,7 @@ async function analyze(url, nested = false) {
   const previous = $('playlist-url').value;
   setBusy(true);
   showSourceHelp(false);
+  showSourceSwitch(false);
   $('selection').hidden = true;
   selected = undefined;
   controller = new AbortController();
@@ -165,6 +170,7 @@ async function saveFile() {
 }
 function finishSave() {
   showSourceHelp(false);
+  showSourceSwitch(false);
   $('progress-title').textContent = '视频已保存';
   message(`已保存 ${lastFilename}。现在可以关闭此标签页。`);
   clearBlob();
@@ -203,6 +209,38 @@ $('source-help').addEventListener('click', async () => {
       : '请在来源页点击播放，让网站发出新的视频请求；随后回到此工作台，点击“继续下载”。');
   } catch (error) { message(error.message, true); }
 });
+$('source-switch').addEventListener('click', async () => {
+  if (!job || working || !selected || !hasSourceTab) return;
+  controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(new Error('检查新来源超时，请在原页面播放后重试。')), 30000);
+  setBusy(true);
+  $('cancel').textContent = '取消检查';
+  $('cancel').hidden = false;
+  message('正在核对新来源的清晰度、分片和已下载内容…');
+  let adopted = false;
+  try {
+    const result = await send({ type: 'GET_SOURCE_MEDIA', tabId: sourceTabId, sourceOrigin });
+    const replacement = await findReplacementPlaylist(selected, job,
+      result.items.map((item) => item.url), { signal: controller.signal });
+    if (controller.signal.aborted) throw controller.signal.reason;
+    // Uncommitted results can be fetched again; the validated disk prefix stays.
+    job.pending.clear();
+    job.playlist = replacement;
+    selected = replacement;
+    $('playlist-url').value = replacement.url;
+    showSourceSwitch(false);
+    showSourceHelp(false);
+    message('已核对播放列表与已写入内容的抽样，正在从未完成的分片继续。');
+    adopted = true;
+  } catch (error) { message(error.message || '无法验证新来源，原任务和进度已保留。', true); }
+  finally {
+    clearTimeout(timeout);
+    $('cancel').hidden = true;
+    $('cancel').textContent = '暂停';
+    setBusy(false);
+  }
+  if (adopted) $('start').click();
+});
 $('save-again').addEventListener('click', saveFile);
 $('discard').addEventListener('click', async () => {
   if (working) return;
@@ -214,6 +252,7 @@ $('start').addEventListener('click', async () => {
   if (!selected || working) return;
   clearBlob();
   showSourceHelp(false);
+  showSourceSwitch(false);
   controller = new AbortController();
   setBusy(true);
   $('progress-panel').hidden = false;
@@ -265,6 +304,7 @@ $('start').addEventListener('click', async () => {
     const paused = controller.signal.aborted || error.name === 'AbortError';
     $('progress-title').textContent = paused ? (job ? '下载已暂停' : '已取消选择保存位置') : '下载已暂停 · 需要重试';
     if (job?.failedWrite) await discardJob();
+    showSourceSwitch(Boolean(job && signedContext(selected?.url)));
     message(paused ? (job ? '已保留下载进度，点击“继续下载”即可续传。' : '尚未开始下载，可重新选择保存位置。')
       : `${error.message}${job ? ' 已完成分片保留在本页，可点击继续下载。' : ''}`, !paused);
     $('cancel').hidden = true;

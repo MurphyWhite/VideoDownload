@@ -2,6 +2,7 @@ import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { once } from 'node:events';
+import { createHash } from 'node:crypto';
 import { parsePlaylist, sequenceIv } from '../lib/hls.js';
 import { fetchBytes, loadPlaylist, downloadMedia, createDownloadState } from '../lib/downloader.js';
 import { createAuthProvider } from '../lib/auth.js';
@@ -49,6 +50,7 @@ before(async () => {
     if (path === '/nested/two.ts') { response.end(second); return; }
     if (path === '/encrypted') { response.end(encrypted); return; }
     if (path === '/key') { keyRequests += 1; response.end(keyBytes); return; }
+    if (path === '/short-key') { response.end(keyBytes.subarray(0, 8)); return; }
     if (path === '/init') { response.end(init); return; }
     if (path === '/fragment') { response.end(fragment); return; }
     if (path === '/retry') { retries += 1; if (retries < 3) response.writeHead(503).end(); else response.end(first); return; }
@@ -90,6 +92,10 @@ encrypted`), `${base}/index.m3u8`);
   const blob = await downloadMedia(parsed);
   assert.deepEqual(new Uint8Array(await blob.arrayBuffer()), new Uint8Array([...first, ...first]));
   assert.equal(keyRequests, 1);
+});
+test('invalid AES key size remains a clear authorization or playlist error', async () => {
+  const parsed = parsePlaylist(list('#EXT-X-KEY:METHOD=AES-128,URI="short-key"\n#EXTINF:2,\nencrypted'), `${base}/index.m3u8`);
+  await assert.rejects(downloadMedia(parsed), /AES-128 密钥必须为 16 字节/);
 });
 test('range downloads validate HTTP 206 and merge exactly once', async () => {
   const parsed = parsePlaylist(list(`#EXTINF:2,
@@ -145,6 +151,14 @@ test('disk mode writes ordered bytes with bounded buffers and without the Blob s
   assert.equal(state.parts.length, 0);
   assert.equal(state.pending.size, 0);
   assert.equal(state.completed, 2);
+  assert.deepEqual(state.firstSegmentProof, { index: 0, digest: createHash('sha256').update(first).digest('hex') });
+  assert.deepEqual(state.lastSegmentProof, { index: 1, digest: createHash('sha256').update(second).digest('hex') });
+});
+test('fMP4 disk mode records the committed initialization bytes for continuity checks', async () => {
+  const parsed = parsePlaylist(list('#EXT-X-MAP:URI="init"\n#EXTINF:2,\nfragment'), `${base}/index.m3u8`);
+  const state = createDownloadState(parsed, { async write() {} });
+  await downloadMedia(parsed, { state });
+  assert.equal(state.initProof, createHash('sha256').update(init).digest('hex'));
 });
 test('paused jobs resume without requesting or writing the completed prefix again', async () => {
   const parsed = await loadPlaylist(`${base}/redirect`);

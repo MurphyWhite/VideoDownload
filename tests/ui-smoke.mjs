@@ -26,6 +26,18 @@ const server = http.createServer(async (request, response) => {
   if (url.pathname === '/signed.m3u8') {
     response.end(media('#EXTINF:2,\nrestricted.ts')); return;
   }
+  if (url.pathname === '/old/asset/1080p/video.m3u8' || url.pathname === '/new/asset/1080p/video.m3u8') {
+    response.end(media('#EXTINF:2,\nfirst.ts\n#EXTINF:2,\nsecond.ts')); return;
+  }
+  if (url.pathname === '/new/asset/master.m3u8') {
+    response.end('#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=4000000,RESOLUTION=1920x1080\n1080p/video.m3u8'); return;
+  }
+  if (url.pathname.endsWith('/first.ts')) { response.end(packet(1)); return; }
+  if (url.pathname.endsWith('/second.ts')) {
+    if (url.pathname.startsWith('/old/')) response.writeHead(403).end();
+    else response.end(packet(2));
+    return;
+  }
   if (url.pathname === '/restricted.ts') { response.writeHead(403).end(); return; }
   if (/\/(?:one|two|slow)\.ts$/.test(url.pathname)) {
     segmentRequests += 1;
@@ -69,6 +81,10 @@ try {
         if (message.type === 'GET_AUTH') return { ok: true, url: message.url };
         if (message.type === 'RELOAD_SOURCE') { window.reloadedTab = message.tabId; return { ok: true }; }
         if (message.type === 'FOCUS_SOURCE') { window.focusedTab = message.tabId; return { ok: true }; }
+        if (message.type === 'GET_SOURCE_MEDIA') return { ok: true, items: [{
+          url: `${origin}/new/asset/master.m3u8?token=new&expires=9999999999&token_path=%2Fasset%2F`,
+          source: 'network', detectedAt: Date.now()
+        }] };
         return { ok: true, items: [{ url: `${origin}/master.m3u8?token=hidden`, source: 'network' }] };
       } },
       tabs: { async query() { return [{ id: 1, title: '测试视频 · 清晰度选择', url: `${origin}/watch` }]; } },
@@ -156,6 +172,23 @@ try {
   await page.click('#start');
   await waitMessage('手动刷新来源页并播放');
   await page.click('#cancel');
+  await waitMessage('已保留下载进度');
+  await page.click('#discard');
+  await page.goto(`${origin}/download.html?fixture=cdn#${new URLSearchParams({
+    url: `${origin}/old/asset/1080p/video.m3u8?token=old&expires=9999999999&token_path=%2Fasset%2F`,
+    title: '切换 CDN 测试', sourceTabId: '1', sourceOrigin: origin
+  })}`);
+  await waitMessage('视频已就绪');
+  await page.locator('#auto-refresh').uncheck();
+  await page.click('#start');
+  await waitMessage('手动刷新来源页并播放');
+  await page.click('#cancel');
+  await waitMessage('已保留下载进度');
+  assert.match(await page.locator('#progress-detail').textContent(), /^1 \/ 2 个分片/);
+  assert.equal(await page.locator('#source-switch').isVisible(), true);
+  await page.click('#source-switch');
+  await waitMessage('已保存');
+  assert.deepEqual(await page.evaluate(() => window.savedBytes), [...packet(1), ...packet(2)]);
   await page.goto(`${origin}/popup.html`);
   await page.waitForSelector('.media-card');
   assert.equal(await page.locator('.media-address').textContent(), `127.0.0.1:${server.address().port}/master.m3u8`);
@@ -165,7 +198,7 @@ try {
   // window.close() may be ignored for a tab not opened by a script; the mock retains the URL.
   assert.equal(await page.evaluate(() => window.openedManager), `${origin}/master.m3u8?token=hidden`);
   assert.deepEqual(errors, []);
-  console.log('UI smoke passed: variants, exact merged bytes, save retry, pause/resume, disk write/close, HTTP error, popup and signed URLs.');
+  console.log('UI smoke passed: variants, exact merged bytes, save retry, pause/resume, disk write/close, HTTP error, signed URLs and CDN recovery.');
   console.log('Chrome APIs were mocked; this does not verify unpacked extension loading or real video playback.');
 } finally {
   await browser?.close();
