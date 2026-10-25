@@ -104,13 +104,18 @@ async function handleMessage(message) {
     const data = await chrome.storage.session.get(keyFor(message.tabId));
     return { items: data[keyFor(message.tabId)] || [] };
   }
-  if (message.type === 'RELOAD_SOURCE') {
+  if (message.type === 'RELOAD_SOURCE' || message.type === 'FOCUS_SOURCE') {
     const tab = await chrome.tabs.get(message.tabId);
     const source = new URL(httpUrl(tab.url));
     if (typeof message.sourceOrigin !== 'string' || source.origin !== message.sourceOrigin) {
       throw new Error('来源标签页已切换网站，请手动刷新原视频页面。');
     }
-    await chrome.tabs.reload(message.tabId);
+    if (message.type === 'RELOAD_SOURCE') await chrome.tabs.reload(message.tabId);
+    else {
+      await chrome.tabs.update(message.tabId, { active: true });
+      // Activating a tab does not focus its window when the source is elsewhere.
+      await chrome.windows.update(tab.windowId, { focused: true });
+    }
     return {};
   }
   if (message.type === 'SCAN') {

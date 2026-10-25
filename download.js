@@ -6,6 +6,7 @@ const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.hash.slice(1));
 const sourceTabId = /^\d+$/.test(params.get('sourceTabId') || '') ? Number(params.get('sourceTabId')) : null;
 const sourceOrigin = params.get('sourceOrigin');
+const hasSourceTab = sourceTabId !== null && Boolean(sourceOrigin);
 let selected;
 let controller;
 let working = false;
@@ -25,6 +26,7 @@ function message(text, error = false) {
   $('message').textContent = text;
   $('message').classList.toggle('error', error);
 }
+function showSourceHelp(show) { $('source-help').hidden = !show || !hasSourceTab; }
 function setBusy(value) {
   working = value;
   for (const id of ['analyze', 'playlist-url', 'filename', 'back', 'output-mode']) $(id).disabled = value || Boolean(job);
@@ -47,6 +49,7 @@ function clearBlob() {
 async function discardJob() {
   if (job?.writer) await job.writer.abort().catch(() => {});
   job = undefined;
+  showSourceHelp(false);
   setBusy(false);
 }
 
@@ -55,14 +58,21 @@ const auth = createAuthProvider({
   refreshSource: async () => {
     if ($('auto-refresh').checked && sourceTabId !== null && sourceOrigin) {
       try { await send({ type: 'RELOAD_SOURCE', tabId: sourceTabId, sourceOrigin }); }
-      catch { message('无法自动刷新来源页面，请手动刷新并播放视频；本页正在等待新签名。'); }
+      catch { message('无法自动刷新来源页面。点击“打开来源页并播放”，手动刷新并播放视频；本页会保留进度并等待新签名。'); return; }
+      message('来源页已刷新。浏览器可能阻止自动播放；若下载未继续，请点击“打开来源页并播放”，在原页面点击播放。');
     }
   },
   onWaiting: () => {
     $('progress-title').textContent = '签名已失效，等待新链接';
-    message('已保留下载进度，正在获取新签名。若未自动恢复，请刷新原视频页面并播放；不要关闭此工作台。');
+    showSourceHelp(true);
+    message(hasSourceTab
+      ? ($('auto-refresh').checked
+        ? '已保留下载进度，正在获取新签名。若来源页刷新后暂停，请点击“打开来源页并播放”。'
+        : '已保留下载进度，正在获取新签名。请打开来源页，手动刷新来源页并播放视频。')
+      : '已保留下载进度，正在获取新签名。请在原视频页面刷新并播放；不要关闭此工作台。');
   },
   onReady: () => {
+    showSourceHelp(false);
     $('playlist-url').value = auth.urlFor($('playlist-url').value);
     $('progress-title').textContent = job ? '正在继续下载分片' : '正在读取播放列表';
     message('已获取新签名，自动从未完成的分片继续。');
@@ -106,6 +116,7 @@ async function analyze(url, nested = false) {
   if (working || job) return false;
   const previous = $('playlist-url').value;
   setBusy(true);
+  showSourceHelp(false);
   $('selection').hidden = true;
   selected = undefined;
   controller = new AbortController();
@@ -153,6 +164,7 @@ async function saveFile() {
   } catch (error) { interruptedSave(error.message); }
 }
 function finishSave() {
+  showSourceHelp(false);
   $('progress-title').textContent = '视频已保存';
   message(`已保存 ${lastFilename}。现在可以关闭此标签页。`);
   clearBlob();
@@ -182,6 +194,15 @@ $('back').addEventListener('click', async () => {
   $('back').hidden = history.length === 0;
 });
 $('cancel').addEventListener('click', () => controller?.abort());
+$('source-help').addEventListener('click', async () => {
+  if (!hasSourceTab) return;
+  try {
+    await send({ type: 'FOCUS_SOURCE', tabId: sourceTabId, sourceOrigin });
+    message(working
+      ? '请在来源页点击播放，让网站发出新的视频请求；随后回到此工作台，下载会自动继续。'
+      : '请在来源页点击播放，让网站发出新的视频请求；随后回到此工作台，点击“继续下载”。');
+  } catch (error) { message(error.message, true); }
+});
 $('save-again').addEventListener('click', saveFile);
 $('discard').addEventListener('click', async () => {
   if (working) return;
@@ -192,6 +213,7 @@ $('discard').addEventListener('click', async () => {
 $('start').addEventListener('click', async () => {
   if (!selected || working) return;
   clearBlob();
+  showSourceHelp(false);
   controller = new AbortController();
   setBusy(true);
   $('progress-panel').hidden = false;

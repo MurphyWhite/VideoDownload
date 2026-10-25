@@ -75,6 +75,7 @@ progress::-webkit-progress-bar { background:#e9eee5; }
 progress::-webkit-progress-value { background:var(--green); border-radius:9px; transition:width .2s; }
 .progress-meta { font-size:12px; color:var(--muted); }
 .progress-meta strong { color:var(--green); }
+.source-help { display:block; width:100%; margin-top:18px; padding:11px 14px; border:1px solid #bad9c5; border-radius:8px; background:#edf5ed; color:var(--green); text-align:left; font-size:13px; }
 .message { padding:4px 2px; font-size:13px; line-height:1.8; color:var(--green); overflow-wrap:anywhere; }
 .message.error { color:#ac5645; }
 .help { padding:25px 2px 0; margin-top:22px; border-top:1px solid var(--line); }

@@ -23,6 +23,10 @@ const server = http.createServer(async (request, response) => {
     const segment = url.pathname === '/slow.m3u8' ? 'slow.ts' : 'one.ts';
     response.end(media(`#EXTINF:2,\n${segment}\n#EXTINF:2,\ntwo.ts`)); return;
   }
+  if (url.pathname === '/signed.m3u8') {
+    response.end(media('#EXTINF:2,\nrestricted.ts')); return;
+  }
+  if (url.pathname === '/restricted.ts') { response.writeHead(403).end(); return; }
   if (/\/(?:one|two|slow)\.ts$/.test(url.pathname)) {
     segmentRequests += 1;
     if (url.pathname === '/slow.ts') { slowRequests += 1; setTimeout(() => response.end(packet(1)), 300); }
@@ -62,6 +66,9 @@ try {
     window.chrome = {
       runtime: { async sendMessage(message) {
         if (message.type === 'OPEN_DOWNLOAD') { window.openedManager = message.url; return { ok: true }; }
+        if (message.type === 'GET_AUTH') return { ok: true, url: message.url };
+        if (message.type === 'RELOAD_SOURCE') { window.reloadedTab = message.tabId; return { ok: true }; }
+        if (message.type === 'FOCUS_SOURCE') { window.focusedTab = message.tabId; return { ok: true }; }
         return { ok: true, items: [{ url: `${origin}/master.m3u8?token=hidden`, source: 'network' }] };
       } },
       tabs: { async query() { return [{ id: 1, title: '测试视频 · 清晰度选择', url: `${origin}/watch` }]; } },
@@ -128,6 +135,27 @@ try {
   await open('invalid.m3u8');
   await waitMessage('HTTP 403');
   assert.equal(await page.locator('#selection').isHidden(), true);
+  await page.goto(`${origin}/download.html#${new URLSearchParams({
+    url: `${origin}/signed.m3u8?token=old&expires=9999999999&token_path=%2F`,
+    title: '测试视频', sourceTabId: '1', sourceOrigin: origin
+  })}`);
+  await waitMessage('视频已就绪');
+  assert.equal(await page.locator('#source-help').isHidden(), true);
+  await page.click('#start');
+  await waitMessage('来源页已刷新');
+  assert.equal(await page.locator('#source-help').isVisible(), true);
+  await page.click('#source-help');
+  assert.equal(await page.evaluate(() => window.focusedTab), 1);
+  await waitMessage('下载会自动继续');
+  await page.click('#cancel');
+  await waitMessage('已保留下载进度');
+  await page.click('#source-help');
+  await waitMessage('继续下载');
+  await page.click('#discard');
+  await page.locator('#auto-refresh').uncheck();
+  await page.click('#start');
+  await waitMessage('手动刷新来源页并播放');
+  await page.click('#cancel');
   await page.goto(`${origin}/popup.html`);
   await page.waitForSelector('.media-card');
   assert.equal(await page.locator('.media-address').textContent(), `127.0.0.1:${server.address().port}/master.m3u8`);

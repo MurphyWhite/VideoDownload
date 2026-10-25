@@ -13,7 +13,8 @@ globalThis.chrome = {
   } },
   action: { async setBadgeText() {}, async setBadgeBackgroundColor() {} },
   webRequest: { onHeadersReceived: event() },
-  tabs: { onUpdated: event(), onRemoved: event(), async create(value) { created.push(value); }, async get() { return { url: 'https://page.test/' }; }, async reload(id) { globalThis.reloadedTab = id; } },
+  tabs: { onUpdated: event(), onRemoved: event(), async create(value) { created.push(value); }, async get() { return { url: 'https://page.test/', windowId: 7 }; }, async reload(id) { globalThis.reloadedTab = id; }, async update(id, changes) { globalThis.focusedTab = { id, ...changes }; } },
+  windows: { async update(id, changes) { globalThis.focusedWindow = { id, ...changes }; } },
   scripting: { async executeScript() { return [{ result: { urls: ['https://cdn.test/dom.m3u8', 'javascript:bad'] } }]; } }
 };
 await import('../background.js');
@@ -66,4 +67,12 @@ test('source refresh refuses a tab that navigated to another website', async () 
   assert.equal(globalThis.reloadedTab, undefined);
   assert.equal((await send({ type: 'RELOAD_SOURCE', tabId: 1, sourceOrigin: 'https://page.test' })).ok, true);
   assert.equal(globalThis.reloadedTab, 1);
+});
+
+test('source playback guide only focuses the original website tab', async () => {
+  assert.equal((await send({ type: 'FOCUS_SOURCE', tabId: 1, sourceOrigin: 'https://other.test' })).ok, false);
+  assert.equal(globalThis.focusedTab, undefined);
+  assert.equal((await send({ type: 'FOCUS_SOURCE', tabId: 1, sourceOrigin: 'https://page.test' })).ok, true);
+  assert.deepEqual(globalThis.focusedTab, { id: 1, active: true });
+  assert.deepEqual(globalThis.focusedWindow, { id: 7, focused: true });
 });
